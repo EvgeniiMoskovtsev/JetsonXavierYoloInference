@@ -22,8 +22,8 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 set(PROJECT_SOURCES
     main.cpp
 
-    inference.h
-    inference.cpp
+        include/yolo/inference.h
+        src/yolo/inference.cpp
 )
 
 add_executable(Yolov8CPPInference ${PROJECT_SOURCES})
