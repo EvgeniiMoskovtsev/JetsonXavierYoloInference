@@ -19,12 +19,19 @@ find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 # !OpenCV
 
-set(PROJECT_SOURCES
-    main.cpp
+file(GLOB_RECURSE
+        SOURCE_FILES
+        LIST_DIRECTORIES true
 
-        include/yolo/inference.h
-        src/yolo/inference.cpp
-)
+        "${CMAKE_SOURCE_DIR}/include/yolo/*.h"
+        "${CMAKE_SOURCE_DIR}src/yolo/*.cpp"
 
-add_executable(Yolov8CPPInference ${PROJECT_SOURCES})
-target_link_libraries(Yolov8CPPInference ${OpenCV_LIBS})
+        "${CMAKE_SOURCE_DIR}/include/ByteTrack/*.h"
+        "${CMAKE_SOURCE_DIR}/src/ByteTrack/*.cpp"
+        )
+
+
+find_package(Eigen3 ${EIGEN_VERSION} QUIET)
+
+add_executable(Yolov8CPPInference main.cpp ${SOURCE_FILES})
+target_link_libraries(Yolov8CPPInference ${OpenCV_LIBS}  Eigen3::Eigen)
