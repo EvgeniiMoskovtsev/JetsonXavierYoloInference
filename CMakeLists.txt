@@ -24,7 +24,7 @@ file(GLOB_RECURSE
         LIST_DIRECTORIES true
 
         "${CMAKE_SOURCE_DIR}/include/yolo/*.h"
-        "${CMAKE_SOURCE_DIR}src/yolo/*.cpp"
+        "${CMAKE_SOURCE_DIR}/src/yolo/*.cpp"
 
         "${CMAKE_SOURCE_DIR}/include/ByteTrack/*.h"
         "${CMAKE_SOURCE_DIR}/src/ByteTrack/*.cpp"
