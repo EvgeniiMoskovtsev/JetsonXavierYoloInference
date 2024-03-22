@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "include/yolo/inference.h"
+#include "include/ByteTrack/BYTETracker.h"
 
 using namespace std;
 using namespace cv;
@@ -24,6 +25,12 @@ cv::Mat resize_and_pad_image(cv::Mat input_image, int target_size) {
 	cv::copyMakeBorder(resized_image, output_image, top, bottom, left, right, cv::BORDER_CONSTANT, cv::Scalar(128, 128, 128));
 
 	return output_image;
+}
+
+byte_track::Object detectionToObject(const Detection& detection)
+{
+	byte_track::Rect<float> rect(detection.box.x, detection.box.y, detection.box.width, detection.box.height);
+	return byte_track::Object(rect, detection.class_id, detection.confidence);
 }
 
 int main(int argc, char **argv)
@@ -60,9 +67,12 @@ int main(int argc, char **argv)
 	std::cout << "Frames: " << total_frames << std::endl;
 
 
-	// Note that in this example the classes are hard-coded and 'classes.txt' is a place holder.
+	// YOLO detector
 	Inference inf(projectBasePath + "/yolov8s_640x640.onnx", cv::Size(TARGET_SIZE, TARGET_SIZE), "classes.txt", runOnGPU);
 
+	// Byte Track tracker
+	int trackBuffer = 30;
+	byte_track::BYTETracker tracker(static_cast<int>(fps), trackBuffer);
 	cv::Mat frame;
 	cv::Mat resized_img;
 	while (true) {
@@ -77,33 +87,70 @@ int main(int argc, char **argv)
         int detections = output.size();
         std::cout << "Number of detections:" << detections << std::endl;
 
+		std::vector<byte_track::Object> objs;
         for (int i = 0; i < detections; ++i)
         {
             Detection detection = output[i];
 
-            cv::Rect box = detection.box;
-            cv::Scalar color = detection.color;
-
-			const int PADDING_TOP = 140; // 	int top = (target_size - resized_image.rows) / 2;
-			const float SCALE = 0.33; //  	float scale = std::min((float)target_size / input_image.cols, (float)target_size / input_image.rows);
-			box.y -= PADDING_TOP;
-
-			// Масштабируем bbox обратно к размерам исходного изображения
-			box.x = box.x / SCALE;
-			box.y = box.y / SCALE;
-			box.width = box.width / SCALE;
-			box.height = box.height / SCALE;
-            // Detection box
-            cv::rectangle(frame, box, color, 2);
-
-            // Detection box text
-            std::string classString = detection.className + ' ' + std::to_string(detection.confidence).substr(0, 4);
-            cv::Size textSize = cv::getTextSize(classString, cv::FONT_HERSHEY_DUPLEX, 1, 2, 0);
-            cv::Rect textBox(box.x, box.y - 40, textSize.width + 10, textSize.height + 20);
-
-            cv::rectangle(frame, textBox, color, cv::FILLED);
-            cv::putText(frame, classString, cv::Point(box.x + 5, box.y - 10), cv::FONT_HERSHEY_DUPLEX, 1, cv::Scalar(0, 0, 0), 2, 0);
+			//byte track
+			byte_track::Object obj = detectionToObject(detection);
+			objs.push_back(obj);
+//
+//            cv::Rect box = detection.box;
+//            cv::Scalar color = detection.color;
+//
+//			const int PADDING_TOP = 140; // 	int top = (target_size - resized_image.rows) / 2;
+//			const float SCALE = 0.33; //  	float scale = std::min((float)target_size / input_image.cols, (float)target_size / input_image.rows);
+//			box.y -= PADDING_TOP;
+//
+//			// Масштабируем bbox обратно к размерам исходного изображения
+//			box.x = box.x / SCALE;
+//			box.y = box.y / SCALE;
+//			box.width = box.width / SCALE;
+//			box.height = box.height / SCALE;
+//            // Detection box
+//            cv::rectangle(frame, box, color, 2);
+//
+//            // Detection box text
+//            std::string classString = detection.className + ' ' + std::to_string(detection.confidence).substr(0, 4);
+//            cv::Size textSize = cv::getTextSize(classString, cv::FONT_HERSHEY_DUPLEX, 1, 2, 0);
+//            cv::Rect textBox(box.x, box.y - 40, textSize.width + 10, textSize.height + 20);
+//
+//            cv::rectangle(frame, textBox, color, cv::FILLED);
+//            cv::putText(frame, classString, cv::Point(box.x + 5, box.y - 10), cv::FONT_HERSHEY_DUPLEX, 1, cv::Scalar(0, 0, 0), 2, 0);
         }
+
+		{
+			tracker.update(objs);
+			const auto outputs = tracker.update(objs);
+
+			for (const auto &outputs_per_frame : outputs)
+			{
+				const auto &rect = outputs_per_frame->getRect();
+				const auto &track_id = outputs_per_frame->getTrackId();
+				const int PADDING_TOP = 140; // 	int top = (target_size - resized_image.rows) / 2;
+				const float SCALE = 0.33; //  	float scale = std::min((float)target_size / input_image.cols, (float)target_size / input_image.rows);
+
+				cv::Rect box(static_cast<int>(rect.x()), static_cast<int>(rect.y()), static_cast<int>(rect.width()), static_cast<int>(rect.height()));
+				box.y -= PADDING_TOP;
+
+				// Масштабируем bbox обратно к размерам исходного изображения
+				box.x = box.x / SCALE;
+				box.y = box.y / SCALE;
+				box.width = box.width / SCALE;
+				box.height = box.height / SCALE;
+				// Detection box
+				cv::rectangle(frame, box, (127,127,127), 2);
+
+				// Detection box text
+				std::string classString = std::to_string(track_id);
+				cv::Size textSize = cv::getTextSize(classString, cv::FONT_HERSHEY_DUPLEX, 1, 2, 0);
+				cv::Rect textBox(box.x, box.y - 40, textSize.width + 10, textSize.height + 20);
+
+				cv::rectangle(frame, textBox, (127,127,127), cv::FILLED);
+				cv::putText(frame, classString, cv::Point(box.x + 5, box.y - 10), cv::FONT_HERSHEY_DUPLEX, 1, cv::Scalar(0, 0, 0), 2, 0);
+			}
+		}
         // Inference ends here...
 
         // This is only for preview purposes
@@ -111,6 +158,6 @@ int main(int argc, char **argv)
         cv::resize(frame, frame, cv::Size(frame.cols*scale, frame.rows*scale));
         cv::imshow("Inference", frame);
 
-        cv::waitKey(-1);
+        cv::waitKey(20);
     }
 }
